@@ -1,13 +1,13 @@
+local Players = game:GetService("Players")
+
 ---====== Load spawner ======---
 local spawner = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Doors/Entity%20Spawner/V2/Source.lua"))()
-
-local A60_IMAGE_ID = "rbxassetid://11420786500"
 
 ---====== Create entity ======---
 local entity = spawner.Create({
     Entity = {
         Name = "Hardcore A-60",
-        Asset = "rbxassetid://14826206904",
+        Asset = "rbxassetid://16138462624",
         HeightOffset = 0
     },
     Lights = {
@@ -30,12 +30,12 @@ local entity = spawner.Create({
         Enabled = true,
         Type = "Ambush",
         Min = 2,
-        Max = math.random(1, 5),
+        Max = 5,
         Delay = 1
     },
     Damage = {
-        Enabled = false, -- Để false để tự xử lý Jumpscare, tránh bị đụng hệ thống Sát thương của Doors
-        Range = 40,
+        Enabled = true,
+        Range = 80,
         Amount = 125
     },
     Crucifixion = {
@@ -47,125 +47,93 @@ local entity = spawner.Create({
     Death = {
         Type = "Guiding",
         Hints = {"You died to Hardcore A-60...", "He will announce his presence with a loud scream.", "Hes fast and he can rebound, so stay hidden until hes gone!", "Im Sure Youll Make it!"},
-        Cause = "Hardcore A-60"
+        Cause = ""
     }
 })
 
-local isJumpscaring = false
-
-local function TriggerJumpscare()
-    if isJumpscaring then return end
-    isJumpscaring = true
-
-    local player = game.Players.LocalPlayer
-    local char = player.Character
-    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-
-    local parentContainer = player:WaitForChild("PlayerGui")
-    pcall(function()
-        if gethui then parentContainer = gethui() end
-    end)
-
-    local JumpscareGui = Instance.new("ScreenGui")
-    JumpscareGui.Name = "JumpscareGui"
-    JumpscareGui.IgnoreGuiInset = true
-    JumpscareGui.DisplayOrder = 2147483647
-    JumpscareGui.Parent = parentContainer
-
-    local Background = Instance.new("Frame")
-    Background.Name = "Background"
-    Background.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-    Background.BorderSizePixel = 0
-    Background.Size = UDim2.new(1, 0, 1, 0)
-    Background.ZIndex = 1
-    Background.Parent = JumpscareGui
-
-    local Face = Instance.new("ImageLabel")
-    Face.Name = "Face"
-    Face.AnchorPoint = Vector2.new(0.5, 0.5)
-    Face.BackgroundTransparency = 1
-    Face.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Face.Size = UDim2.new(0, 650, 0, 650)
-    Face.ImageTransparency = 0
-    Face.ZIndex = 999
-    Face.Image = A60_IMAGE_ID
-    Face.Parent = JumpscareGui
-
-    local scare = Instance.new("Sound")
-    scare.Parent = JumpscareGui
-    scare.SoundId = "rbxassetid://9114221327"
-    scare.Volume = 10
-    scare:Play()
-
-    task.spawn(function()
-        while JumpscareGui and JumpscareGui.Parent do
-            Background.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-            Face.Position = UDim2.new(0.5, math.random(-30, 30), 0.5, math.random(-30, 30))
-            task.wait(0.03)
-            Background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            Face.Position = UDim2.new(0.5, math.random(-30, 30), 0.5, math.random(-30, 30))
-            task.wait(0.03)
-        end
-    end)
-
-    task.wait(0.85)
-    JumpscareGui:Destroy()
-    if humanoid then
-        humanoid.Health = 0
-    end
-end
-
----====== Bắt vị trí siêu mượt bằng RunService ======---
-local RunService = game:GetService("RunService")
-local connection
-
+---====== Debug entity ======---
 entity:SetCallback("OnSpawned", function()
     print("Entity has spawned")
-    isJumpscaring = false
+end)
 
-    connection = RunService.Heartbeat:Connect(function()
-        if isJumpscaring then 
-            if connection then connection:Disconnect() end
-            return 
-        end
+entity:SetCallback("OnStartMoving", function()
+    print("Entity has started moving")
+end)
 
-        local player = game.Players.LocalPlayer
-        local char = player.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+entity:SetCallback("OnEnterRoom", function(room, firstTime)
+    if firstTime == true then
+        print("Entity has entered room: ".. room.Name.. " for the first time")
+    else
+        print("Entity has entered room: ".. room.Name.. " again")
+    end
+end)
 
-        if hrp and humanoid and humanoid.Health > 0 then
-            -- Quái A-60 khi tạo ra sẽ nằm trong workspace
-            local entityModel = workspace:FindFirstChild("Hardcore A-60")
-            if entityModel then
-                local mainPart = entityModel.PrimaryPart or entityModel:FindFirstChildWhichIsA("BasePart")
-                if mainPart then
-                    local dist = (mainPart.Position - hrp.Position).Magnitude
-                    if dist <= 50 then -- Tăng bán kính phát hiện lên 50 stud để bắt kịp tốc độ 350 của A-60
-                        if connection then connection:Disconnect() end
-                        TriggerJumpscare()
-                    end
-                end
-            end
-        end
-    end)
+entity:SetCallback("OnLookAt", function(lineOfSight)
+    if lineOfSight == true then
+        print("Player is looking at entity")
+    else
+        print("Player view is obstructed by something")
+    end
+end)
+
+entity:SetCallback("OnRebounding", function(startOfRebound)
+    if startOfRebound == true then
+        print("Entity has started rebounding")
+    else
+        print("Entity has finished rebounding")
+    end
+end)
+
+entity:SetCallback("OnDespawning", function()
+    print("Entity is despawning")
 end)
 
 entity:SetCallback("OnDespawned", function()
     print("Entity has despawned")
-    if connection then connection:Disconnect() end
     
-    if not hasGottenAchievement then
-				hasGottenAchievement = true
-				local achievementGiver = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Doors/Custom%20Achievements/Source.lua"))()
-				achievementGiver({
-					Title = "A Notagis Fright",
-					Desc = "IamHere",
-					Reason = "Encounter Entity Called A-60",
-					Image = "rbxassetid://18877073824"
-				})
-			end
-		end
+    -- Trao thành tựu 1 lần duy nhất
+    local player = Players.LocalPlayer
+    if player and not player:FindFirstChild("HardcoreA60AchievementUnlocked") then
+        local flag = Instance.new("BoolValue")
+        flag.Name = "HardcoreA60AchievementUnlocked"
+        flag.Value = true
+        flag.Parent = player
+
+        pcall(function()
+            local achievementGiver = loadstring(game:HttpGet("https://raw.githubusercontent.com/vct0721/Doors-Stuff/refs/heads/main/Other/Modifiyed%20Achivements%20Source"))()
+
+            achievementGiver({
+                Title = "I Cant Hear You",
+                Desc = "Soundproof!",
+                Reason = "Survive Silence",
+                Image = "rbxassetid://12309073114"
+            })
+        end)
+    end
+end)
+
+---====== Jumpscare Fix (Chạy trước khi Guiding Light hiện) ======---
+entity:SetCallback("OnDamagePlayer", function(newHealth)
+    if newHealth <= 0 then
+        print("Entity has killed the player")
+
+        pcall(function()
+            -- Chạy Jumpscare ngay lập tức không chậm trễ
+            local Jumpscare = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Doors/Jumpscare%20Creator/Source.lua"))()
+
+            Jumpscare({
+                Image1 = "rbxassetid://14826206904",
+                Image2 = "rbxassetid://14826206904",
+                Sound1 = "rbxassetid://9114221327",
+                Sound2 = "rbxassetid://9114221327",
+                Shake = true,
+                Teeth = true,
+                Duration = 2
+            })
+        end)
+    else
+        print("Entity has damaged the player")
+    end
 end)
 
 ---====== Run entity ======---
