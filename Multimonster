@@ -1,10 +1,11 @@
 print("Multimonster is here!!!!")
+
 if workspace:FindFirstChild("SeekMovingNewClone") 
-        or workspace.CurrentRooms:FindFirstChild("50") 
-        or workspace.CurrentRooms:FindFirstChild("100") then
-            repeat task.wait() until not workspace:FindFirstChild("SeekMovingNewClone") 
-                and not workspace.CurrentRooms:FindFirstChild("50") 
-                and not workspace.CurrentRooms:FindFirstChild("100")
+    or workspace.CurrentRooms:FindFirstChild("50") 
+    or workspace.CurrentRooms:FindFirstChild("100") then
+    repeat task.wait() until not workspace:FindFirstChild("SeekMovingNewClone") 
+        and not workspace.CurrentRooms:FindFirstChild("50") 
+        and not workspace.CurrentRooms:FindFirstChild("100")
 end
 
 local function GetGitSound(GithubSnd, SoundName)
@@ -44,7 +45,7 @@ local entity = spawner.Create({
     CameraShake = {
         Enabled = true,
         Range = 50,
-        Values = {15, 20, 9, 7} -- Magnitude, Roughness, FadeIn, FadeOut
+        Values = {15, 20, 9, 7}
     },
     Movement = {
         Speed = math.random(300, 375),
@@ -53,13 +54,13 @@ local entity = spawner.Create({
     },
     Rebounding = {
         Enabled = true,
-        Type = "Ambush", -- "Blitz"
+        Type = "Ambush",
         Min = 1,
         Max = 5,
         Delay = 2
     },
     Damage = {
-        Enabled = false,
+        Enabled = true, -- BẬT DAMAGE (giữ nguyên cấu hình cũ)
         Range = 40,
         Amount = 1
     },
@@ -70,152 +71,160 @@ local entity = spawner.Create({
         Break = false
     },
     Death = {
-        Type = "Guiding", -- "Curious"
+        Type = "Guiding",
         Hints = {"Death", "Hints", "Go", "Here"},
-        Cause = ""
+        Cause = "Multimonster"
     }
 })
 
----====== Debug entity ======---
+---====== Setup Callbacks ======---
 entity:SetCallback("OnSpawned", function()
     print("Entity has spawned")
 
-    -- Get a reference to the object and its Attachment in the Workspace
-    local part = workspace:WaitForChild("Multimonster")
-    local object = part:WaitForChild("RushNew")
-    local attachment = object:WaitForChild("Main")
-    local e = attachment:WaitForChild("Face")
+    local part = workspace:WaitForChild("Multimonster", 5)
+    if not part then return end
+    
+    local object = part:WaitForChild("RushNew", 5)
+    if not object then return end
+    
+    local attachment = object:WaitForChild("Main", 5)
+    if not attachment then return end
+    
+    local e = attachment:WaitForChild("Face", 5)
+    if not e then return end
 
     object.CanCollide = false
 
-    while true do
-        e.Texture = "rbxassetid://12145534911"
-        wait(0)
-        e.Texture = "rbxassetid://12145554242"
-        wait(0)
-        e.Texture = "rbxassetid://12145599498"
-        wait(0)
-        e.Texture = "rbxassetid://12145599275"
-        wait(0)
-        e.Texture = "rbxassetid://12155335619"
-        wait(0)
-        e.Texture = "rbxassetid://12145598814"
-        wait(0)
-        e.Texture = "rbxassetid://12146135062"
-        wait(0)
-        e.Texture = "rbxassetid://11378285585"
-        wait(0)
-    end
+    task.spawn(function()
+        local textures = {
+            "rbxassetid://12145534911",
+            "rbxassetid://12145554242",
+            "rbxassetid://12145599498",
+            "rbxassetid://12145599275",
+            "rbxassetid://12155335619",
+            "rbxassetid://12145598814",
+            "rbxassetid://12146135062",
+            "rbxassetid://11378285585"
+        }
+        
+        while part and part.Parent do
+            for _, textureId in ipairs(textures) do
+                if not e or not e.Parent then break end
+                e.Texture = textureId
+                task.wait(0.06)
+            end
+        end
+    end)
 end)
 
 entity:SetCallback("OnStartMoving", function()
     print("Entity has started moving")
-    wait(3)
+    task.wait(3)
 
-    spawn(function()
-        while task.wait() do
-            if debounce == true then
-                break
-            end
+    task.spawn(function()
+        while task.wait(0.05) do
+            if debounce then break end
             
             local player = game.Players.LocalPlayer
-            local character = player.Character or player.CharacterAdded:Wait()
-            local HumanoidRootPart = character:WaitForChild("HumanoidRootPart")
-            local womp = workspace:FindFirstChild("Multimonster")
-            local wompwomp = womp:FindFirstChild("RushNew")
-            local origin = wompwomp.Position
-            local direction = (HumanoidRootPart.Position - origin).Unit
+            local character = player.Character
+            if not character or not character:FindFirstChild("HumanoidRootPart") then continue end
             
-            local ray = Ray.new(origin, direction * 50)
-            local canSeeTarget = workspace:Raycast(ray.Origin, ray.Direction)
-           
-            if canSeeTarget and canSeeTarget.Instance.Parent == character then 
-                if not character:GetAttribute("Hiding") then
-                    debounce = true
-                    for i,v in pairs(workspace.Multimonster:GetDescendants()) do
-                        if v:IsA("Sound") then
-                            v:Stop()
-                        end
-                    end
-                    
-                    local CameraShaker = require(game.ReplicatedStorage.CameraShaker)
-                    local camera = game.Workspace.CurrentCamera
-                    local camShake = CameraShaker.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
-                        camera.CFrame = camera.CFrame * shakeCf
-                    end)
-                    camShake:Start()
-                    camShake:ShakeOnce(10, 10, 0, 5.5, 1, 0)
+            local HumanoidRootPart = character.HumanoidRootPart
+            local womp = workspace:FindFirstChild("Multimonster")
+            local wompwomp = womp and womp:FindFirstChild("RushNew")
+            
+            if wompwomp then
+                local origin = wompwomp.Position
+                local rayDirection = (HumanoidRootPart.Position - origin)
+                
+                if rayDirection.Magnitude <= 60 then
+                    local raycastParams = RaycastParams.new()
+                    raycastParams.FilterDescendantsInstances = {womp}
+                    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-                    local player = game.Players.LocalPlayer
-                    local playerGui = player:WaitForChild("PlayerGui")
+                    local raycastResult = workspace:Raycast(origin, rayDirection, raycastParams)
+                   
+                    if raycastResult and raycastResult.Instance:IsDescendantOf(character) then 
+                        if not character:GetAttribute("Hiding") then
+                            debounce = true
+                            
+                            local CameraShaker = require(game.ReplicatedStorage.CameraShaker)
+                            local camera = workspace.CurrentCamera
+                            local camShake = CameraShaker.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
+                                camera.CFrame = camera.CFrame * shakeCf
+                            end)
+                            camShake:Start()
+                            camShake:ShakeOnce(10, 10, 0, 5.5, 1, 0)
 
-                    local screenGui = Instance.new("ScreenGui")
-                    screenGui.Name = "RandomImageGui"
-                    screenGui.Parent = playerGui
+                            local playerGui = player:WaitForChild("PlayerGui")
+                            local screenGui = Instance.new("ScreenGui")
+                            screenGui.Name = "RandomImageGui"
+                            screenGui.Parent = playerGui
 
-                    spawn(function()
-                        while task.wait() do
-                            if death == true then
-                                break
+                            task.spawn(function()
+                                while not death do
+                                    local entityPart = workspace:FindFirstChild("Multimonster")
+                                    local entityPrimaryPart = entityPart and entityPart:FindFirstChild("RushNew")
+                                    if entityPrimaryPart and camera then
+                                        entityPrimaryPart.CFrame = camera.CFrame * CFrame.new(0, -0.5, -6)
+                                    end
+                                    if character:FindFirstChild("Humanoid") then
+                                        character.Humanoid.WalkSpeed = 0
+                                    end
+                                    task.wait()
+                                end
+                            end)
+
+                            local Jumpscare = GetGitSound("https://github.com/Tinkgy111/Bang/blob/main/lv_0_20250103234053.mp3?raw=true", "JumpscareSound")
+                            Jumpscare.Parent = game:GetService("SoundService")
+                            Jumpscare.Volume = 5
+                            Jumpscare:Play()
+                             
+                            task.wait(1.2)
+                            local TweenService = game:GetService("TweenService")
+                            
+                            local imageIds = {
+                                "114943702871183",
+                                "77042919484581",
+                                "113785746563976",
+                                "106324997569765",
+                                "93365716697080",
+                                "72735059720396"
+                            }
+
+                            local imageLabel = Instance.new("ImageLabel")
+                            imageLabel.Size = UDim2.new(0, 0, 0, 0)
+                            imageLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+                            imageLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+                            imageLabel.BackgroundColor3 = Color3.new(1, 0, 0)
+                            imageLabel.BackgroundTransparency = 1
+                            imageLabel.Image = "rbxassetid://" .. imageIds[math.random(1, #imageIds)]
+                            imageLabel.ImageTransparency = 1
+                            imageLabel.Parent = screenGui
+
+                            local GetTimeSpeed = TweenInfo.new(0.28, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+
+                            local Anim = TweenService:Create(imageLabel, GetTimeSpeed, {Size = UDim2.new(0, 580, 0, 580)})
+                            local rot = TweenService:Create(imageLabel, GetTimeSpeed, {Rotation = 18})
+                            local tran = TweenService:Create(imageLabel, GetTimeSpeed, {ImageTransparency = 0})
+
+                            Anim:Play()
+                            tran:Play()
+                            rot:Play()
+                            
+                            if character:FindFirstChild("Humanoid") then
+                                character.Humanoid.Health = 0
                             end
-                            local entity = workspace:WaitForChild("Multimonster")
-                            local entityPrimaryPart = entity:FindFirstChild("RushNew")
-                            local Camera = workspace.CurrentCamera
-                            game.TweenService:Create(entityPrimaryPart, TweenInfo.new(0), {CFrame = camera.CFrame * CFrame.new(0, -0.5, -6)}):Play()
-                            game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 0
+
+                            Anim.Completed:Wait()
+                            task.wait(0.8)
+                            TweenService:Create(imageLabel, TweenInfo.new(3), {ImageTransparency = 1}):Play()
+                            task.wait(0.5)
+                            death = true
+                            task.wait(3)
+                            debounce = false
                         end
-                    end)
-
-                    local Jumpscare = GetGitSound("https://github.com/Tinkgy111/Bang/blob/main/lv_0_20250103234053.mp3?raw=true","r")
-                    Jumpscare.Parent = game:GetService("SoundService")
-                    Jumpscare.Volume = 5
-                    Jumpscare:Play()
-                     
-                    task.wait(1.2)
-                    local TweenService = game:GetService("TweenService")
-                    
-                    local imageIds = {
-                        "114943702871183",
-                        "77042919484581",
-                        "113785746563976",
-                        "106324997569765",
-                        "93365716697080",
-                        "72735059720396"
-                    }
-
-                    local function getRandomImageId()
-                        return imageIds[math.random(1, #imageIds)]
                     end
-
-                    local imageLabel = Instance.new("ImageLabel")
-                    imageLabel.Size = UDim2.new(0, 0, 0, 0)
-                    imageLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-                    imageLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
-                    imageLabel.BackgroundColor3 = Color3.new(1, 0, 0)
-                    imageLabel.BackgroundTransparency = 1
-                    imageLabel.Image = "rbxassetid://" .. getRandomImageId()
-                    imageLabel.ImageTransparency = 1
-                    imageLabel.Parent = screenGui
-
-                    local GetTimeSpeed = TweenInfo.new(0.28, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-
-                    local Anim = TweenService:Create(imageLabel, GetTimeSpeed, {Size = UDim2.new(0, 580, 0, 580)})
-                    local rot = TweenService:Create(imageLabel, GetTimeSpeed, {Rotation = 18})
-                    local tran = TweenService:Create(imageLabel, GetTimeSpeed, {ImageTransparency = 0})
-
-                    Anim:Play()
-                    tran:Play()
-                    rot:Play()
-                    
-                    game.Players.LocalPlayer.Character.Humanoid.Health = 0
-
-                    Anim.Completed:Wait()
-                    wait(0.8)
-                    TweenService:Create(imageLabel, TweenInfo.new(3), {ImageTransparency = 1}):Play()
-                    task.wait(0.5)
-                    death = true
-                    task.wait(3)
-                    debounce = false
                 end
             end
         end
@@ -223,23 +232,15 @@ entity:SetCallback("OnStartMoving", function()
 end)
 
 entity:SetCallback("OnEnterRoom", function(room, firstTime)
-    if firstTime == true then
+    if firstTime then
         print("Entity has entered room: ".. room.Name.. " for the first time")
     else
         print("Entity has entered room: ".. room.Name.. " again")
     end
 end)
 
-entity:SetCallback("OnLookAt", function(lineOfSight)
-    if lineOfSight == true then
-        print("Player is looking at entity")
-    else
-        print("Player view is obstructed by something")
-    end
-end)
-
 entity:SetCallback("OnRebounding", function(startOfRebound)
-    if startOfRebound == true then
+    if startOfRebound then
       
     end
 end)
@@ -251,24 +252,31 @@ end)
 entity:SetCallback("OnDespawned", function()
     print("Entity has despawned")
     death = false
-    game.Lighting.MainColorCorrection.TintColor = Color3.fromRGB(62, 7, 12)
-    game.Lighting.MainColorCorrection.Contrast = 0.2
-    game.Lighting.MainColorCorrection.Saturation = -0.7
+    
+    local mainCC = game.Lighting:FindFirstChild("MainColorCorrection")
+    if mainCC then
+        mainCC.TintColor = Color3.fromRGB(255, 50, 50)
+        mainCC.Contrast = 0.2
+        mainCC.Saturation = -0.5
 
-    local tween = game:GetService("TweenService")
-    tween:Create(game.Lighting.MainColorCorrection, TweenInfo.new(5), {Contrast = 0}):Play()
-    tween:Create(game.Lighting.MainColorCorrection, TweenInfo.new(5), {Saturation = 0}):Play()
+        task.wait(5)
 
-    local TweenService = game:GetService("TweenService")
-    local TW = TweenService:Create(game.Lighting.MainColorCorrection, TweenInfo.new(0),{TintColor = Color3.fromRGB(255, 0, 0)})
-    TW:Play()
+        local tween = game:GetService("TweenService")
+        tween:Create(mainCC, TweenInfo.new(3, Enum.EasingStyle.Linear), {
+            Contrast = 0,
+            Saturation = 0,
+            TintColor = Color3.fromRGB(255, 255, 255)
+        }):Play()
+    end
 end)
 
+-- Lấy tên thực thể khi player bị sát thương / giết
 entity:SetCallback("OnDamagePlayer", function(newHealth)
-    if newHealth == 0 then
-        print("Entity has killed the player")
+    local entityName = entity.Model and entity.Model.Name or "Multimonster"
+    if newHealth <= 0 then
+        print("Player killed by entity: " .. entityName)
     else
-        print("cok")
+        print("Player took damage from entity: " .. entityName .. " | Health left: " .. tostring(newHealth))
     end
 end)
 
