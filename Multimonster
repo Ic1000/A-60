@@ -16,21 +16,56 @@ local isJumpscaring = false
 local extraModel = nil
 local followConnection = nil
 
--- CUSTOM SOUND GUIDING LIGHT
+-- CUSTOM SOUND GUIDING LIGHT & TỐC ĐỘ PHÁT
 local CUSTOM_GUIDING_SOUND = "79182044607177" 
 
--- Lắng nghe và đè âm thanh Guiding Light
+-- Danh sách các ID gốc của Guiding Light để quét và bắt trọn gói
+local GUIDING_SOUND_IDS = {
+	"9114223282",
+	"9125814524",
+	"10854271454",
+	"9844421112"
+}
+
+-- Lắng nghe và đè âm thanh Guiding Light (Đã tinh chỉnh tốc độ = 0.55)
 local function HandleGuidingSound(snd)
 	if snd:IsA("Sound") then
 		local function checkAndReplace()
-			if string.find(snd.SoundId, "9114223282") or string.find(snd.SoundId, "9125814524") or string.lower(snd.Name):find("guiding") then
+			local isGuiding = false
+			local lowerName = string.lower(snd.Name)
+			
+			-- Kiểm tra theo tên chứa chữ "guiding"
+			if lowerName:find("guiding") then
+				isGuiding = true
+			else
+				-- Kiểm tra theo danh sách các SoundId gốc
+				for _, id in ipairs(GUIDING_SOUND_IDS) do
+					if string.find(snd.SoundId, id) then
+						isGuiding = true
+						break
+					end
+				end
+			end
+			
+			if isGuiding then
 				if snd.SoundId ~= CUSTOM_GUIDING_SOUND then
 					snd.SoundId = CUSTOM_GUIDING_SOUND
 				end
+				-- Ép tốc độ phát chuẩn 0.55
+				if snd.PlaybackSpeed ~= 0.55 then
+					snd.PlaybackSpeed = 0.55
+				end
 			end
 		end
+		
 		checkAndReplace()
 		snd:GetPropertyChangedSignal("SoundId"):Connect(checkAndReplace)
+		snd:GetPropertyChangedSignal("PlaybackSpeed"):Connect(function()
+			local lowerName = string.lower(snd.Name)
+			if (lowerName:find("guiding") or snd.SoundId == CUSTOM_GUIDING_SOUND) and snd.PlaybackSpeed ~= 0.55 then
+				snd.PlaybackSpeed = 0.55
+			end
+		end)
 	end
 end
 
@@ -83,7 +118,7 @@ local function MakeInvisible(model)
 	end
 end
 
--- Hàm lọc âm thanh: Tắt nhạc nền/nhạc spawn, giữ lại âm thanh thực thể
+-- Hàm lọc âm thanh: Tắt nhạc nền, tiếng thở dốc/panting và các âm thanh phụ của thực thể
 local function FilterEntitySounds(entityModel)
 	if not entityModel then return end
 	for _, desc in ipairs(entityModel:GetDescendants()) do
@@ -96,7 +131,11 @@ local function FilterEntitySounds(entityModel)
 				or soundName:find("bgm") 
 				or soundName:find("outro") 
 				or soundName:find("despawn") 
-				or soundName:find("intro") then
+				or soundName:find("intro")
+				or soundName:find("breath")
+				or soundName:find("panting")
+				or soundName:find("heavy")
+				or soundName:find("gasp") then
 				
 				desc.Volume = 0
 				desc:Stop()
@@ -115,6 +154,110 @@ local function CleanUpExtraModel()
 		extraModel:Destroy()
 		extraModel = nil
 	end
+end
+
+local function BreakRoom(room)
+	if not room then return end
+	task.spawn(function()
+		local assets = room:FindFirstChild("Assets") or room
+		local roomRoot = room.PrimaryPart or room:FindFirstChildWhichIsA("BasePart")
+		if roomRoot then
+			local mainBreak = Instance.new("Sound")
+			mainBreak.SoundId = "rbxassetid://9114223171"
+			mainBreak.Volume = 3.5
+			mainBreak.RollOffMaxDistance = 150
+			mainBreak.Parent = roomRoot
+			mainBreak:Play()
+			mainBreak.Ended:Connect(function() mainBreak:Destroy() end)
+		end
+		
+		local breakSounds = {
+			"rbxassetid://9125992545",
+			"rbxassetid://4004052860",
+			"rbxassetid://7142857558",
+			"rbxassetid://7142843615",
+			"rbxassetid://2612674531",
+			"rbxassetid://2174790942"
+		}
+		local blacklist = { "wardrobe", "bed", "rug", "key", "drawer", "book", "breaker", "table", "desk", "gold", "dresser" }
+		
+		for _, item in ipairs(assets:GetChildren()) do
+			if item:IsA("Model") and item.Name ~= "Door" and item.Name ~= "HidingSpots" then
+				local lowerName = string.lower(item.Name)
+				local blocked = false
+				for _, word in ipairs(blacklist) do
+					if string.find(lowerName, word) then
+						blocked = true
+						break
+					end
+				end
+				if not blocked then
+					for _, part in ipairs(item:GetDescendants()) do
+						if part:IsA("BasePart") then
+							local n = string.lower(part.Name)
+							if not string.find(n, "floor") and not string.find(n, "hitbox") and not string.find(n, "wall") then
+								part:BreakJoints()
+								part.Anchored = false
+								part.CanCollide = true
+								part.CustomPhysicalProperties = PhysicalProperties.new(2.5, 0.3, 0.1, 1, 1)
+								part.AssemblyLinearVelocity = Vector3.new(
+									math.random(-45, 45),
+									math.random(10, 30),
+									math.random(-45, 45)
+								)
+								part.AssemblyAngularVelocity = Vector3.new(
+									math.random(-15, 15),
+									math.random(-15, 15),
+									math.random(-15, 15)
+								)
+								task.spawn(function()
+									for i = 1, 6 do
+										task.wait(0.25)
+										if part and part.Parent and not part.Anchored then
+											part.AssemblyLinearVelocity = Vector3.new(
+												part.AssemblyLinearVelocity.X,
+												-45,
+												part.AssemblyLinearVelocity.Z
+											)
+										end
+									end
+								end)
+								if math.random(1, 2) == 1 then
+									task.spawn(function()
+										local sound = Instance.new("Sound")
+										sound.SoundId = breakSounds[math.random(1, #breakSounds)]
+										sound.Volume = math.random(12, 24) / 10
+										sound.PlaybackSpeed = math.random(85, 115) / 100
+										sound.RollOffMaxDistance = 100
+										sound.Parent = part
+										sound:Play()
+										sound.Ended:Connect(function() sound:Destroy() end)
+									end)
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end)
+end
+
+-- Hàm kích hoạt rung cực mạnh khi Despawn
+local function TriggerExtremeShake()
+	task.spawn(function()
+		pcall(function()
+			local CameraShakerModule = require(ReplicatedStorage:WaitForChild("CameraShaker", 5))
+			local camera = Workspace.CurrentCamera
+			if CameraShakerModule and camera then
+				local despawnShake = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(cf)
+					camera.CFrame = camera.CFrame * cf
+				end)
+				despawnShake:Start()
+				despawnShake:ShakeOnce(35, 25, 0.05, 5)
+			end
+		end)
+	end)
 end
 
 --========================================================--
@@ -146,21 +289,21 @@ local entity = spawner.Create({
 		Enabled = false
 	},
 	CameraShake = {
-		Enabled = false,
-		Range = 50,
-		Values = {15, 20, 9, 7}
+		Enabled = true,
+		Range = 150,
+		Values = {18, 25, 0.05, 0.1}
 	},
 	Movement = {
-		Speed = 267,
+		Speed = math.random(267, 350),
 		Delay = 0,
 		Reversed = false
 	},
 	Rebounding = {
 		Enabled = true,
 		Type = "Ambush",
-		Min = 1,
-		Max = 5,
-		Delay = 2
+		Min = 2,
+		Max = math.random(5, 6),
+		Delay = math.random(0.5, 1.25)
 	},
 	Damage = {
 		Enabled = true,
@@ -168,10 +311,10 @@ local entity = spawner.Create({
 		Amount = 125
 	},
 	Crucifixion = {
-		Enabled = false,
-		Range = 40,
+		Enabled = true,
+		Range = 10,
 		Resist = false,
-		Break = false
+		Break = true
 	},
 	Death = {
 		Type = "Guiding",
@@ -191,10 +334,8 @@ entity:SetCallback("OnSpawned", function()
 	local part = Workspace:WaitForChild("multimonster", 5)
 	if not part then return end
 
-	-- 1. Lọc âm thanh ngay khi spawn
 	FilterEntitySounds(part)
 
-	-- 2. Tải Model phụ tàn hình đi kèm
 	pcall(function()
 		local objects = game:GetObjects("rbxassetid://14826206904")
 		if objects and objects[1] then
@@ -205,7 +346,6 @@ entity:SetCallback("OnSpawned", function()
 		end
 	end)
 
-	-- 3. Đồng bộ vị trí Model phụ đi theo thực thể chính
 	if extraModel and part then
 		followConnection = RunService.RenderStepped:Connect(function()
 			if part and part.Parent and extraModel and extraModel.Parent then
@@ -261,14 +401,6 @@ end)
 
 entity:SetCallback("OnStartMoving", function()
 	print("multimonster has started moving")
-	
-	-- Sửa trùng tên: Đổi tên thành CameraShakerModule
-	local CameraShakerModule = require(ReplicatedStorage:WaitForChild("CameraShaker"))
-	local camera = Workspace.CurrentCamera
-	local distCamShake = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
-		camera.CFrame = camera.CFrame * shakeCf
-	end)
-	distCamShake:Start()
 
 	task.spawn(function()
 		while task.wait(0.05) do
@@ -277,18 +409,25 @@ entity:SetCallback("OnStartMoving", function()
 			local humanoid = character:FindFirstChildOfClass("Humanoid")
 			local HumanoidRootPart = character:FindFirstChild("HumanoidRootPart")
 			local womp = Workspace:FindFirstChild("multimonster")
+			
+			-- Kiểm tra nếu người chơi chết (máu bằng 0), tắt ngay mọi âm thanh của thực thể và dừng rung
+			if not humanoid or humanoid.Health <= 0 then
+				if womp then
+					for _, snd in ipairs(womp:GetDescendants()) do
+						if snd:IsA("Sound") then
+							snd:Stop()
+						end
+					end
+				end
+				break
+			end
+
 			if not womp then break end
 			local wompwomp = womp:FindFirstChild("RushNew")
 			if not wompwomp then break end
-			if not humanoid or humanoid.Health <= 0 or not HumanoidRootPart then continue end
+			if not HumanoidRootPart then continue end
 			
 			local distance = (HumanoidRootPart.Position - wompwomp.Position).Magnitude
-
-			-- HIỆU ỨNG RUNG THEO KHOẢNG CÁCH
-			if distance <= 150 and not isJumpscaring then
-				local intensity = math.clamp((1 - (distance / 150)) * 32, 4, 32)
-				distCamShake:ShakeOnce(intensity, 25, 0.05, 0.1)
-			end
 			
 			local raycastParams = RaycastParams.new()
 			raycastParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -302,6 +441,7 @@ entity:SetCallback("OnStartMoving", function()
 					debounce = true
 					isJumpscaring = true
 					local lockCFrameConnection = nil
+					local camera = Workspace.CurrentCamera
 					local oldCameraType = camera.CameraType
 					local jumpscareModel = nil
 					
@@ -350,11 +490,12 @@ entity:SetCallback("OnStartMoving", function()
 							end
 						end
 						
-						local camShake = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
+						local CameraShakerModule = require(ReplicatedStorage:WaitForChild("CameraShaker"))
+						local jumpCamShake = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
 							camera.CFrame = lockedCFrame * shakeCf
 						end)
-						camShake:Start()
-						camShake:ShakeOnce(10, 10, 0, 5.5, 1, 0)
+						jumpCamShake:Start()
+						jumpCamShake:ShakeOnce(10, 10, 0, 5.5, 1, 0)
 						
 						lockCFrameConnection = RunService.RenderStepped:Connect(function()
 							if not isJumpscaring then return end
@@ -380,13 +521,18 @@ entity:SetCallback("OnStartMoving", function()
 							lockCFrameConnection:Disconnect()
 							lockCFrameConnection = nil
 						end
-						if camShake then
-							camShake:Stop()
+						if jumpCamShake then
+							jumpCamShake:Stop()
 						end
-						camera.CameraType = oldCameraType or Enum.CameraType.Custom
 						
-						if jumpscareModel and jumpscareModel ~= wompwomp then
-							jumpscareModel:Destroy()
+						-- RESET HOÀN TOÀN CAMERA ĐỂ KHÔNG BỊ NGHIÊNG
+						camera.CameraType = Enum.CameraType.Custom
+						local humanoidObj = character:FindFirstChildOfClass("Humanoid")
+						if humanoidObj then
+							camera.CameraSubject = humanoidObj
+						end
+						if HumanoidRootPart then
+							camera.CFrame = CFrame.new(camera.CFrame.Position, HumanoidRootPart.Position + HumanoidRootPart.CFrame.LookVector * 100)
 						end
 						
 						for _, sndData in ipairs(entitySounds) do
@@ -395,6 +541,9 @@ entity:SetCallback("OnStartMoving", function()
 							end
 						end
 						
+						if jumpscareModel and jumpscareModel ~= wompwomp then
+							jumpscareModel:Destroy()
+						end
 						for part, originalTransparency in pairs(savedTransparencies) do
 							if part and part.Parent then
 								part.Transparency = originalTransparency
@@ -430,25 +579,44 @@ entity:SetCallback("OnStartMoving", function()
 						end
 						humanoid.Health = 0
 						
+						-- Phóng to ảnh Jumpscare 2D
 						TweenService:Create(jumpscareImg, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 							Size = UDim2.new(1.2, 0, 1.4, 0),
 							Rotation = math.random(-25, 25)
 						}):Play()
 						
+						-- ĐỢI LÂU HƠN TRÊN MẶT NGƯỜI CHƠI (1.5 giây)
 						task.wait(0.5)
 						isJumpscaring = false
 						
-						TweenService:Create(jumpscareImg, TweenInfo.new(0.3), { ImageTransparency = 1 }):Play()
-						TweenService:Create(colorCorrection, TweenInfo.new(1.5), {
+						-- TÀNG HÌNH TỪ TỪ (1.0 giây)
+						TweenService:Create(jumpscareImg, TweenInfo.new(3.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { ImageTransparency = 1 }):Play()
+						TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
 							Brightness = 0,
 							Contrast = 0,
 							Saturation = 0,
 							TintColor = Color3.fromRGB(255, 255, 255),
 						}):Play()
 						
-						Debris:AddItem(screenGui, 1.5)
-						Debris:AddItem(colorCorrection, 1.5)
-						Debris:AddItem(scareSound, 1.5)
+						Debris:AddItem(screenGui, 2.5)
+						Debris:AddItem(colorCorrection, 2.5)
+						Debris:AddItem(scareSound, 2.5)
+						
+						-- HIỆU ỨNG RUNG HẬU JUMPSCARE (Tự tắt khi máu <= 0 hoặc hết 3 giây)
+						task.spawn(function()
+							local postShake = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
+								camera.CFrame = camera.CFrame * cf
+							end)
+							postShake:Start()
+							
+							local startTime = tick()
+							while tick() - startTime < 1.5 and humanoid and humanoid.Health > 0 and character and character.Parent do
+								postShake:ShakeOnce(14, 20, 0.05, 0.1)
+								task.wait(0.1)
+							end
+							
+							postShake:Stop()
+						end)
 						
 						task.wait(1)
 						debounce = false
@@ -456,38 +624,20 @@ entity:SetCallback("OnStartMoving", function()
 				end
 			end
 		end
-		if distCamShake then
-			distCamShake:Stop()
-		end
 	end)
 end)
 
 entity:SetCallback("OnEnterRoom", function(room, firstTime)
 	if room then
-		pcall(function()
-			loadstring(game:HttpGet("https://raw.githubusercontent.com/tranthienhao872-ship-it/Blaa/refs/heads/main/Ph%C3%A1%20%C4%91%E1%BB%93"))()(room)
-		end)
+		BreakRoom(room)
 	end
 end)
 
 entity:SetCallback("OnDespawned", function()
 	print("multimonster has despawned")
 	CleanUpExtraModel()
+	TriggerExtremeShake()
 	
-	-- 1. Rung SIÊU DỮ ĐỘI khi Despawn (Cường độ 45, độ thô 30 kéo dài 5s) bất kể bị Jumpscare hay không
-	pcall(function()
-		local CameraShakerModule = require(ReplicatedStorage:WaitForChild("CameraShaker", 5))
-		local camera = Workspace.CurrentCamera
-		if CameraShakerModule and camera then
-			local despawnShake = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(cf)
-				camera.CFrame = camera.CFrame * cf
-			end)
-			despawnShake:Start()
-			despawnShake:ShakeOnce(45, 30, 0.05, 5)
-		end
-	end)
-	
-	-- 2. Đổi màu ánh sáng Lighting sang đỏ mượt mà
 	local lighting = Lighting:FindFirstChild("MainColorCorrection")
 	if not lighting then
 		lighting = Instance.new("ColorCorrectionEffect")
