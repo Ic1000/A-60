@@ -8,14 +8,14 @@ local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local SoundService = game:GetService("SoundService") -- ĐÃ THÊM: Khai báo SoundService chuẩn xác
+local SoundService = game:GetService("SoundService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local debounce = false
 local isJumpscaring = false
-local processedRooms = {}
+local destroyedRooms = {}
 
 -- Biến cho Model phụ tàn hình đi theo
 local extraModel = nil
@@ -24,7 +24,6 @@ local followConnection = nil
 -- CUSTOM SOUND GUIDING LIGHT & TỐC ĐỘ PHÁT
 local CUSTOM_GUIDING_SOUND = "79182044607177" 
 
--- Danh sách các ID gốc của Guiding Light để quét và bắt trọn gói
 local GUIDING_SOUND_IDS = {
 	"9114223282",
 	"9125814524",
@@ -32,7 +31,6 @@ local GUIDING_SOUND_IDS = {
 	"9844421112"
 }
 
--- Lắng nghe và đè âm thanh Guiding Light (Đã tinh chỉnh tốc độ = 0.55)
 local function HandleGuidingSound(snd)
 	if snd:IsA("Sound") then
 		local function checkAndReplace()
@@ -101,7 +99,6 @@ local function GetGitSound(GithubSnd, SoundName)
 	return sound
 end
 
--- Hàm làm tàn hình hoàn toàn Model phụ
 local function MakeInvisible(model)
 	if not model then return end
 	for _, desc in ipairs(model:GetDescendants()) do
@@ -120,7 +117,6 @@ local function MakeInvisible(model)
 	end
 end
 
--- Hàm lọc âm thanh: Tắt nhạc nền, tiếng thở dốc/panting và các âm thanh phụ của thực thể
 local function FilterEntitySounds(entityModel)
 	if not entityModel then return end
 	for _, desc in ipairs(entityModel:GetDescendants()) do
@@ -146,7 +142,6 @@ local function FilterEntitySounds(entityModel)
 	end
 end
 
--- Hàm dọn dẹp Model phụ
 local function CleanUpExtraModel()
 	if followConnection then
 		followConnection:Disconnect()
@@ -169,155 +164,112 @@ doorSound2.Volume = 3
 doorSound2.Parent = SoundService
 
 --========================================================--
--- ROOM OBJECT BREAK (LẠI CHẠY QUA LÀ BAY TIẾP & TÁC ĐỘNG NGAY)
+-- ROOM OBJECT BREAK (ĐÃ BỌC HÀM CHUẨN XÁC)
 --========================================================--
-
-local isFirstBreak = true -- Đánh dấu lần vỡ đầu tiên
-
 local function BreakRoom(room)
-	if not room then return end
+	if room and not destroyedRooms[room] then
+		destroyedRooms[room] = true
+		
+		task.spawn(function()
+			task.wait(0.05)
+			
+			local breakSound = Instance.new("Sound")
+			breakSound.SoundId = "rbxassetid://9114223171"
+			breakSound.Volume = 2.5
+			breakSound.Parent = room:FindFirstChild("Assets") or room
+			breakSound:Play()
+			breakSound.Ended:Connect(function() breakSound:Destroy() end)
 
-	task.spawn(function()
-		task.wait(0.02)
+			local assetContainer = room:FindFirstChild("Assets") or room
+			local breakSounds = {
+				"rbxassetid://9125992545",
+				"rbxassetid://4004052860",
+				"rbxassetid://7142857558",
+				"rbxassetid://7142843615",
+				"rbxassetid://7142857558",
+				"rbxassetid://2612674531",
+				"rbxassetid://2174790942"
+			}
 
-		local assets = room:FindFirstChild("Assets") or room
+			local blacklist = {"wardrobe", "bed", "rug", "key", "drawer", "book", "breaker", "table", "desk", "gold", "dresser"}
 
-		local breakSounds = {
-			"rbxassetid://9125992545",
-			"rbxassetid://4004052860",
-			"rbxassetid://7142857558",
-			"rbxassetid://7142843615",
-			"rbxassetid://2612674531",
-			"rbxassetid://2174790942"
-		}
-
-		-- 🔊 XỬ LÝ ÂM THANH
-		if isFirstBreak then
-			isFirstBreak = false
-			-- Lần đầu tiên: Phát tất cả âm thanh vỡ cùng lúc
-			for _, soundId in ipairs(breakSounds) do
-				local fullBreakSound = Instance.new("Sound")
-				fullBreakSound.SoundId = soundId
-				fullBreakSound.Volume = 2.0
-				fullBreakSound.RollOffMaxDistance = 100
-				fullBreakSound.Parent = assets
-				fullBreakSound:Play()
-
-				fullBreakSound.Ended:Connect(function()
-					fullBreakSound:Destroy()
-				end)
-			end
-		else
-			-- Các lần chạy lại sau: Phát 1 âm thanh ngẫu nhiên
-			local selectedSoundId = breakSounds[math.random(1, #breakSounds)]
-			local randomBreakSound = Instance.new("Sound")
-			randomBreakSound.SoundId = selectedSoundId
-			randomBreakSound.Volume = 2.5
-			randomBreakSound.RollOffMaxDistance = 100
-			randomBreakSound.Parent = assets
-			randomBreakSound:Play()
-
-			randomBreakSound.Ended:Connect(function()
-				randomBreakSound:Destroy()
-			end)
-		end
-
-		local blacklist = {
-			"wardrobe",
-			"bed",
-			"rug",
-			"key",
-			"drawer",
-			"book",
-			"breaker",
-			"table",
-			"desk",
-			"gold",			
-			"dresser"
-		}
-
-		for _, item in ipairs(assets:GetChildren()) do
-			if item:IsA("Model")
-				and item.Name ~= "Door"
-				and item.Name ~= "HidingSpots" then
-
-				local lowerName = string.lower(item.Name)
-				local blocked = false
-
-				for _, word in ipairs(blacklist) do
-					if string.find(lowerName, word) then
-						blocked = true
-						break
+			for _, item in pairs(assetContainer:GetChildren()) do
+				if item:IsA("Model") and item.Name ~= "Door" and item.Name ~= "HidingSpots" then
+					
+					local isBlacklisted = false
+					local itemNameLower = string.lower(item.Name)
+					for _, word in ipairs(blacklist) do
+						if string.find(itemNameLower, word) then
+							isBlacklisted = true
+							break
+						end
 					end
-				end
 
-				if not blocked then
-					local primary = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")
-
-					if primary then
-						-- Mở khóa vật lý hoàn toàn cho toàn bộ Part
-						for _, part in ipairs(item:GetDescendants()) do
-							if part:IsA("BasePart") then
-								local n = string.lower(part.Name)
-
-								if not string.find(n, "floor") and not string.find(n, "hitbox") then
-									part.Anchored = false
-									part.CanCollide = true
-									part.CanTouch = true
-
-									-- Tinh chỉnh vật lý nhẹ hơn chút để dễ bị hất văng nhiều lần
-									part.CustomPhysicalProperties = PhysicalProperties.new(
-										1.5,  -- Density vừa phải
-										0.2,  -- Friction
-										0.3,  -- Elasticity (Tạo độ nảy nhẹ khi đập sàn)
-										1,
-										1
-									)
-
-									pcall(function()
-										part:SetNetworkOwner(LocalPlayer)
-									end)
-								end
-							end
+					if not isBlacklisted then
+						local soundParent = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart") or room
+						if soundParent then
+							local s = Instance.new("Sound")
+							s.SoundId = breakSounds[math.random(1, #breakSounds)]
+							s.Volume = math.random(20, 35) / 10
+							s.PlaybackSpeed = math.random(85, 115) / 100
+							s.RollOffMaxDistance = 100
+							s.Parent = soundParent
+							s:Play()
+							s.Ended:Connect(function() s:Destroy() end)
 						end
 
-						-- Tạo lực hất văng mới mỗi khi thực thể lướt qua
-						primary.AssemblyLinearVelocity = Vector3.new(
-							math.random(-60, 60),
-							math.random(-60, -20), -- Ép rơi xuống nhưng có vận tốc hất
-							math.random(-60, 60)
-						)
+						local primary = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")
+						if primary then
+							for _, v in ipairs(item:GetDescendants()) do
+								if v:IsA("BasePart") then
+									local lowerName = string.lower(v.Name)
 
-						primary.AssemblyAngularVelocity = Vector3.new(
-							math.random(-25, 25),
-							math.random(-25, 25),
-							math.random(-25, 25)
-						)
+									if not string.find(lowerName, "floor") and not string.find(lowerName, "hitbox") then
+										v.Anchored = false
+										v.CanCollide = true
 
-						-- Lực hút kéo rớt xuống sàn nhanh chóng để chuẩn bị cho đợt bay tiếp theo
-						task.spawn(function()
-							local attachment = Instance.new("Attachment")
-							attachment.Parent = primary
+										v.CustomPhysicalProperties = PhysicalProperties.new(
+											0.01,  
+											0.01,  
+											0.5,   
+											1,     
+											1      
+										)
 
-							local linearVelocity = Instance.new("LinearVelocity")
-							linearVelocity.MaxForce = 999999
-							linearVelocity.VectorVelocity = Vector3.new(0, -90, 0)
-							linearVelocity.Attachment0 = attachment
-							linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
-							linearVelocity.Parent = primary
+										pcall(function()
+											if v:CanSetNetworkOwnership() then
+												v:SetNetworkOwner(LocalPlayer) -- ĐÃ FIX: Dùng đúng biến LocalPlayer viết hoa
+											end
+										end)
 
-							task.wait(0.35)
-							linearVelocity:Destroy()
-							attachment:Destroy()
-						end)
+										v.CFrame = v.CFrame + Vector3.new(0, 0.05, 0)
+									end
+								end
+							end
+
+							primary.Anchored = true
+							task.wait()
+							primary.Anchored = false
+
+							primary.AssemblyLinearVelocity = Vector3.new(
+								math.random(-60, 60),
+								math.random(20, 50),
+								math.random(-60, 60)
+							)
+
+							primary.AssemblyAngularVelocity = Vector3.new(
+								math.random(-25, 25),
+								math.random(-25, 25),
+								math.random(-25, 25)
+							)
+						end
 					end
 				end
 			end
-		end
-	end)
+		end)
+	end
 end
 
--- Hàm kích hoạt rung cực mạnh khi Despawn
 local function TriggerExtremeShake()
 	task.spawn(function()
 		pcall(function()
@@ -545,7 +497,6 @@ entity:SetCallback("OnStartMoving", function()
 							end
 						end
 						
-						-- Đã thêm pcall bảo vệ tải asset Jumpscare tránh văng lỗi
 						local successLoad, loadedObjects = pcall(function()
 							return game:GetObjects(JUMPSCARE_MODEL_ID)
 						end)
@@ -675,7 +626,7 @@ entity:SetCallback("OnStartMoving", function()
 						
 						task.spawn(function()
 							local postShake = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
-								camera.CFrame = camera.CFrame * cf
+								camera.CFrame = camera.CFrame * shakeCf -- ĐÃ FIX: Dùng đúng tham số shakeCf
 							end)
 							postShake:Start()
 							
@@ -709,11 +660,9 @@ entity:SetCallback("OnDespawned", function()
 	print("multimonster has despawned")
 	CleanUpExtraModel()
 	TriggerExtremeShake()
-	
-	isFirstBreak = true
 
 	doorSound1:Stop()
-			doorSound2:Stop()
+	doorSound2:Stop()
 	
 	local lighting = Lighting:FindFirstChild("MainColorCorrection")
 	if not lighting then
