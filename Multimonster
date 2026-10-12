@@ -8,9 +8,14 @@ local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local SoundService = game:GetService("SoundService") -- ĐÃ THÊM: Khai báo SoundService chuẩn xác
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local debounce = false
 local isJumpscaring = false
+local processedRooms = {}
 
 -- Biến cho Model phụ tàn hình đi theo
 local extraModel = nil
@@ -34,11 +39,9 @@ local function HandleGuidingSound(snd)
 			local isGuiding = false
 			local lowerName = string.lower(snd.Name)
 			
-			-- Kiểm tra theo tên chứa chữ "guiding"
 			if lowerName:find("guiding") then
 				isGuiding = true
 			else
-				-- Kiểm tra theo danh sách các SoundId gốc
 				for _, id in ipairs(GUIDING_SOUND_IDS) do
 					if string.find(snd.SoundId, id) then
 						isGuiding = true
@@ -51,7 +54,6 @@ local function HandleGuidingSound(snd)
 				if snd.SoundId ~= CUSTOM_GUIDING_SOUND then
 					snd.SoundId = CUSTOM_GUIDING_SOUND
 				end
-				-- Ép tốc độ phát chuẩn 0.55
 				if snd.PlaybackSpeed ~= 0.55 then
 					snd.PlaybackSpeed = 0.55
 				end
@@ -156,21 +158,30 @@ local function CleanUpExtraModel()
 	end
 end
 
+local doorSound1 = Instance.new("Sound")
+doorSound1.SoundId = "rbxassetid://9126281820"
+doorSound1.Volume = 3
+doorSound1.Parent = SoundService
+
+local doorSound2 = Instance.new("Sound")
+doorSound2.SoundId = "rbxassetid://9126281769"
+doorSound2.Volume = 3
+doorSound2.Parent = SoundService
+
+--========================================================--
+-- ROOM OBJECT BREAK (LẠI CHẠY QUA LÀ BAY TIẾP & TÁC ĐỘNG NGAY)
+--========================================================--
+
+local isFirstBreak = true -- Đánh dấu lần vỡ đầu tiên
+
 local function BreakRoom(room)
 	if not room then return end
+
 	task.spawn(function()
+		task.wait(0.02)
+
 		local assets = room:FindFirstChild("Assets") or room
-		local roomRoot = room.PrimaryPart or room:FindFirstChildWhichIsA("BasePart")
-		if roomRoot then
-			local mainBreak = Instance.new("Sound")
-			mainBreak.SoundId = "rbxassetid://9114223171"
-			mainBreak.Volume = 3.5
-			mainBreak.RollOffMaxDistance = 150
-			mainBreak.Parent = roomRoot
-			mainBreak:Play()
-			mainBreak.Ended:Connect(function() mainBreak:Destroy() end)
-		end
-		
+
 		local breakSounds = {
 			"rbxassetid://9125992545",
 			"rbxassetid://4004052860",
@@ -179,63 +190,126 @@ local function BreakRoom(room)
 			"rbxassetid://2612674531",
 			"rbxassetid://2174790942"
 		}
-		local blacklist = { "wardrobe", "bed", "rug", "key", "drawer", "book", "breaker", "table", "desk", "gold", "dresser" }
-		
+
+		-- 🔊 XỬ LÝ ÂM THANH
+		if isFirstBreak then
+			isFirstBreak = false
+			-- Lần đầu tiên: Phát tất cả âm thanh vỡ cùng lúc
+			for _, soundId in ipairs(breakSounds) do
+				local fullBreakSound = Instance.new("Sound")
+				fullBreakSound.SoundId = soundId
+				fullBreakSound.Volume = 2.0
+				fullBreakSound.RollOffMaxDistance = 100
+				fullBreakSound.Parent = assets
+				fullBreakSound:Play()
+
+				fullBreakSound.Ended:Connect(function()
+					fullBreakSound:Destroy()
+				end)
+			end
+		else
+			-- Các lần chạy lại sau: Phát 1 âm thanh ngẫu nhiên
+			local selectedSoundId = breakSounds[math.random(1, #breakSounds)]
+			local randomBreakSound = Instance.new("Sound")
+			randomBreakSound.SoundId = selectedSoundId
+			randomBreakSound.Volume = 2.5
+			randomBreakSound.RollOffMaxDistance = 100
+			randomBreakSound.Parent = assets
+			randomBreakSound:Play()
+
+			randomBreakSound.Ended:Connect(function()
+				randomBreakSound:Destroy()
+			end)
+		end
+
+		local blacklist = {
+			"wardrobe",
+			"bed",
+			"rug",
+			"key",
+			"drawer",
+			"book",
+			"breaker",
+			"table",
+			"desk",
+			"gold",			
+			"dresser"
+		}
+
 		for _, item in ipairs(assets:GetChildren()) do
-			if item:IsA("Model") and item.Name ~= "Door" and item.Name ~= "HidingSpots" then
+			if item:IsA("Model")
+				and item.Name ~= "Door"
+				and item.Name ~= "HidingSpots" then
+
 				local lowerName = string.lower(item.Name)
 				local blocked = false
+
 				for _, word in ipairs(blacklist) do
 					if string.find(lowerName, word) then
 						blocked = true
 						break
 					end
 				end
+
 				if not blocked then
-					for _, part in ipairs(item:GetDescendants()) do
-						if part:IsA("BasePart") then
-							local n = string.lower(part.Name)
-							if not string.find(n, "floor") and not string.find(n, "hitbox") and not string.find(n, "wall") then
-								part:BreakJoints()
-								part.Anchored = false
-								part.CanCollide = true
-								part.CustomPhysicalProperties = PhysicalProperties.new(2.5, 0.3, 0.1, 1, 1)
-								part.AssemblyLinearVelocity = Vector3.new(
-									math.random(-45, 45),
-									math.random(10, 30),
-									math.random(-45, 45)
-								)
-								part.AssemblyAngularVelocity = Vector3.new(
-									math.random(-15, 15),
-									math.random(-15, 15),
-									math.random(-15, 15)
-								)
-								task.spawn(function()
-									for i = 1, 6 do
-										task.wait(0.25)
-										if part and part.Parent and not part.Anchored then
-											part.AssemblyLinearVelocity = Vector3.new(
-												part.AssemblyLinearVelocity.X,
-												-45,
-												part.AssemblyLinearVelocity.Z
-											)
-										end
-									end
-								end)
-								if math.random(1, 2) == 1 then
-									task.spawn(function()
-										local sound = Instance.new("Sound")
-										sound.SoundId = breakSounds[math.random(1, #breakSounds)]
-										sound.Volume = math.random(12, 24) / 10
-										sound.PlaybackSpeed = math.random(85, 115) / 100
-										sound.RollOffMaxDistance = 100
-										sound.Parent = part
-										sound:Play()
-										sound.Ended:Connect(function() sound:Destroy() end)
+					local primary = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")
+
+					if primary then
+						-- Mở khóa vật lý hoàn toàn cho toàn bộ Part
+						for _, part in ipairs(item:GetDescendants()) do
+							if part:IsA("BasePart") then
+								local n = string.lower(part.Name)
+
+								if not string.find(n, "floor") and not string.find(n, "hitbox") then
+									part.Anchored = false
+									part.CanCollide = true
+									part.CanTouch = true
+
+									-- Tinh chỉnh vật lý nhẹ hơn chút để dễ bị hất văng nhiều lần
+									part.CustomPhysicalProperties = PhysicalProperties.new(
+										1.5,  -- Density vừa phải
+										0.2,  -- Friction
+										0.3,  -- Elasticity (Tạo độ nảy nhẹ khi đập sàn)
+										1,
+										1
+									)
+
+									pcall(function()
+										part:SetNetworkOwner(LocalPlayer)
 									end)
 								end
 							end
 						end
+
+						-- Tạo lực hất văng mới mỗi khi thực thể lướt qua
+						primary.AssemblyLinearVelocity = Vector3.new(
+							math.random(-60, 60),
+							math.random(-60, -20), -- Ép rơi xuống nhưng có vận tốc hất
+							math.random(-60, 60)
+						)
+
+						primary.AssemblyAngularVelocity = Vector3.new(
+							math.random(-25, 25),
+							math.random(-25, 25),
+							math.random(-25, 25)
+						)
+
+						-- Lực hút kéo rớt xuống sàn nhanh chóng để chuẩn bị cho đợt bay tiếp theo
+						task.spawn(function()
+							local attachment = Instance.new("Attachment")
+							attachment.Parent = primary
+
+							local linearVelocity = Instance.new("LinearVelocity")
+							linearVelocity.MaxForce = 999999
+							linearVelocity.VectorVelocity = Vector3.new(0, -90, 0)
+							linearVelocity.Attachment0 = attachment
+							linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+							linearVelocity.Parent = primary
+
+							task.wait(0.35)
+							linearVelocity:Destroy()
+							attachment:Destroy()
+						end)
 					end
 				end
 			end
@@ -303,12 +377,12 @@ local entity = spawner.Create({
 		Type = "Ambush",
 		Min = 2,
 		Max = math.random(5, 6),
-		Delay = math.random(0.5, 1.25)
+		Delay = math.random(1, 2)
 	},
 	Damage = {
 		Enabled = true,
 		Range = 40,
-		Amount = 125
+		Amount = 0
 	},
 	Crucifixion = {
 		Enabled = true,
@@ -410,7 +484,6 @@ entity:SetCallback("OnStartMoving", function()
 			local HumanoidRootPart = character:FindFirstChild("HumanoidRootPart")
 			local womp = Workspace:FindFirstChild("multimonster")
 			
-			-- Kiểm tra nếu người chơi chết (máu bằng 0), tắt ngay mọi âm thanh của thực thể và dừng rung
 			if not humanoid or humanoid.Health <= 0 then
 				if womp then
 					for _, snd in ipairs(womp:GetDescendants()) do
@@ -442,7 +515,6 @@ entity:SetCallback("OnStartMoving", function()
 					isJumpscaring = true
 					local lockCFrameConnection = nil
 					local camera = Workspace.CurrentCamera
-					local oldCameraType = camera.CameraType
 					local jumpscareModel = nil
 					
 					pcall(function()
@@ -473,8 +545,11 @@ entity:SetCallback("OnStartMoving", function()
 							end
 						end
 						
-						local loadedObjects = game:GetObjects(JUMPSCARE_MODEL_ID)
-						if loadedObjects and #loadedObjects > 0 then
+						-- Đã thêm pcall bảo vệ tải asset Jumpscare tránh văng lỗi
+						local successLoad, loadedObjects = pcall(function()
+							return game:GetObjects(JUMPSCARE_MODEL_ID)
+						end)
+						if successLoad and loadedObjects and #loadedObjects > 0 then
 							jumpscareModel = loadedObjects[1]
 							jumpscareModel.Parent = Workspace
 							for _, p in ipairs(jumpscareModel:GetDescendants()) do
@@ -525,7 +600,6 @@ entity:SetCallback("OnStartMoving", function()
 							jumpCamShake:Stop()
 						end
 						
-						-- RESET HOÀN TOÀN CAMERA ĐỂ KHÔNG BỊ NGHIÊNG
 						camera.CameraType = Enum.CameraType.Custom
 						local humanoidObj = character:FindFirstChildOfClass("Humanoid")
 						if humanoidObj then
@@ -577,19 +651,16 @@ entity:SetCallback("OnStartMoving", function()
 						if HumanoidRootPart then
 							HumanoidRootPart.Anchored = false
 						end
-						humanoid.Health = 0
+						humanoid.Health = 100
 						
-						-- Phóng to ảnh Jumpscare 2D
 						TweenService:Create(jumpscareImg, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 							Size = UDim2.new(1.2, 0, 1.4, 0),
 							Rotation = math.random(-25, 25)
 						}):Play()
 						
-						-- ĐỢI LÂU HƠN TRÊN MẶT NGƯỜI CHƠI (1.5 giây)
 						task.wait(0.5)
 						isJumpscaring = false
 						
-						-- TÀNG HÌNH TỪ TỪ (1.0 giây)
 						TweenService:Create(jumpscareImg, TweenInfo.new(3.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { ImageTransparency = 1 }):Play()
 						TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
 							Brightness = 0,
@@ -602,7 +673,6 @@ entity:SetCallback("OnStartMoving", function()
 						Debris:AddItem(colorCorrection, 2.5)
 						Debris:AddItem(scareSound, 2.5)
 						
-						-- HIỆU ỨNG RUNG HẬU JUMPSCARE (Tự tắt khi máu <= 0 hoặc hết 3 giây)
 						task.spawn(function()
 							local postShake = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(shakeCf)
 								camera.CFrame = camera.CFrame * cf
@@ -629,7 +699,9 @@ end)
 
 entity:SetCallback("OnEnterRoom", function(room, firstTime)
 	if room then
-		BreakRoom(room)
+		doorSound1:Play()
+		doorSound2:Play()
+		BreakRoom(room)			
 	end
 end)
 
@@ -637,6 +709,11 @@ entity:SetCallback("OnDespawned", function()
 	print("multimonster has despawned")
 	CleanUpExtraModel()
 	TriggerExtremeShake()
+	
+	isFirstBreak = true
+
+	doorSound1:Stop()
+			doorSound2:Stop()
 	
 	local lighting = Lighting:FindFirstChild("MainColorCorrection")
 	if not lighting then
@@ -649,7 +726,7 @@ entity:SetCallback("OnDespawned", function()
 	lighting.Contrast = 0.5
 	lighting.Saturation = 0.5
 	
-	task.delay(5, function()
+	task.delay(7, function()
 		TweenService:Create(lighting, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			TintColor = Color3.fromRGB(255, 255, 255),
 			Contrast = 0,
