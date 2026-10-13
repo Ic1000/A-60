@@ -332,7 +332,7 @@ local entity = spawner.Create({
 		Delay = math.random(1, 2)
 	},
 	Damage = {
-		Enabled = true,
+		Enabled = false,
 		Range = 40,
 		Amount = 125
 	},
@@ -602,7 +602,7 @@ entity:SetCallback("OnStartMoving", function()
 						if HumanoidRootPart then
 							HumanoidRootPart.Anchored = false
 						end
-						humanoid.Health = 0
+						entity.Config.Damage.Enabled = true
 						
 						TweenService:Create(jumpscareImg, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 							Size = UDim2.new(1.2, 0, 1.4, 0),
